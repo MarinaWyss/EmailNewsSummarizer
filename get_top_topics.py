@@ -1,4 +1,3 @@
-import os.path
 import os
 import base64
 import tiktoken
@@ -12,12 +11,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 openai_key = os.getenv('OPENAI_API_KEY')
-client = OpenAI(api_key=(openai_key))
+client = OpenAI(api_key=openai_key)
 
-# Token limit for GPT-3.5-turbo is 4096 tokens. I'm using a lower limit to leave space for other context.
-TOKEN_LIMIT = 3500
+TOKEN_LIMIT = 100000
 tokenizer = tiktoken.get_encoding("cl100k_base")
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+MODEL = 'gpt-4o-2024-08-06'
 
 def count_tokens(text):
     """Returns the number of tokens in a given text."""
@@ -85,7 +84,7 @@ def get_email_content():
 def openai_request(prompt):
     """Makes a request to OpenAI API."""
     completion = client.chat.completions.create(
-        model='gpt-3.5-turbo',
+        model=MODEL,
         messages=[
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": prompt}
@@ -120,7 +119,7 @@ def batch_summarize_and_identify_topics(summaries, batch_size=5):
 def final_summary_of_top_topics(batch_summaries):
     """Takes summaries from each batch and identifies the final top topics."""
     combined_summaries = "\n\n".join(batch_summaries)
-    prompt = generate_prompt(combined_summaries, "Provide a final summary of the overall most important topics from these emails, with links.")
+    prompt = generate_prompt(combined_summaries, "Provide a final bulleted list of the overall most important topics from these emails along with links.")
     return openai_request(prompt)
 
 def main():

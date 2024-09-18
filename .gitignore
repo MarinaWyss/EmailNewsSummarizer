@@ -2,3 +2,4 @@
 credentials*
 token*
 .python-version
+.venv/*
