@@ -1,0 +1,5 @@
+SCOPES: "https://www.googleapis.com/auth/gmail.readonly"
+MODEL: 'gpt-4o-mini'
+MAX_RETRIES: 10
+INITIAL_DELAY: 5
+BACKOFF_FACTOR: 2
