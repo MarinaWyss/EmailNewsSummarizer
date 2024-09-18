@@ -19,9 +19,10 @@ openai_key = os.getenv('OPENAI_API_KEY')
 client = OpenAI(api_key=openai_key)
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
-MODEL = 'gpt-4o-2024-08-06'
+MODEL = 'gpt-4o-mini'
 MAX_RETRIES = 10  # Maximum number of retries after rate limit error
-DELAY = 20  # Wait time in seconds before retrying
+INITIAL_DELAY = 5  # Initial delay in seconds before retrying
+BACKOFF_FACTOR = 2  # Backoff factor to increase delay exponentially
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -88,6 +89,8 @@ def get_email_content() -> List[str]:
 def openai_request(prompt: str) -> str:
     """Makes a request to OpenAI API with retry logic for rate limiting."""
     retries = 0
+    delay = INITIAL_DELAY  # Start with an initial delay
+
     while retries < MAX_RETRIES:
         try:
             completion = client.chat.completions.create(
@@ -102,16 +105,12 @@ def openai_request(prompt: str) -> str:
 
         except RateLimitError as e:
             retries += 1
-            retry_after = e.response.headers.get("Retry-After", DELAY)
-            logger.warning(f"Rate limit reached. Retrying in {retry_after} seconds...")
-            time.sleep(float(retry_after))
+            logger.warning(f"Rate limit reached. Retrying in {delay} seconds...")
+            time.sleep(delay)
+            delay *= BACKOFF_FACTOR  # Exponential backoff
     
     logger.error("Max retries reached. Aborting.")
     raise Exception("Max retries reached. Please try again later.")
-
-def extract_links(text: str) -> List[str]:
-    """Extracts all URLs from a given text using a regex."""
-    return re.findall(r'(https?://[^\s]+)', text)
 
 def identify_top_topics(emails_text: str) -> List[str]:
     """Identifies the most important topics from all emails."""
@@ -123,45 +122,29 @@ def identify_top_topics(emails_text: str) -> List[str]:
     logger.info("Topics: ", topics)
     return [topic.strip() for topic in topics if topic.strip()]
 
-def summarize_and_extract_links(topics: List[str], emails_text: str) -> Dict[str, Dict[str, List[str]]]:
+def summarize_topics(topics: List[str], emails_text: str) -> Dict[str, str]:
     """
-    Summarizes the topics and extracts links related to each topic from the emails.
-    Returns a dictionary with topic as the key and another dictionary containing 'summary' and 'links' as values.
+    Summarizes the topics without extracting links.
+    Returns a dictionary with topics as the key and the summaries as values.
     """
-    logger.info("Summarizing topics and extracting links...")
-    topic_data = defaultdict(lambda: {'summary': '', 'links': []})
+    logger.info("Summarizing topics...")
+    topic_summaries = {}
 
     for i, topic in enumerate(topics):
         logger.info(f"Processing topic number {i}: {topic}")
-        prompt = (f"Summarize the topic '{topic}' based on the following emails and extract all relevant links:\n\n"
-                  f"{emails_text}\n\n"
-                  "Return the summary first, followed by a list of links.")
-        response = openai_request(prompt)
+        prompt = f"Summarize the topic '{topic}' based on the following emails:\n\n{emails_text}"
+        summary = openai_request(prompt)
+        topic_summaries[topic] = summary.strip()
 
-        # Separate summary and links using a simple heuristic (split by 'http')
-        if "http" in response:
-            summary, links_text = response.split("http", 1)
-            summary = summary.strip()
-            links = extract_links("http" + links_text)  # Add 'http' back since we split it off
-        else:
-            summary = response.strip()
-            links = []
+    return topic_summaries
 
-        topic_data[topic]['summary'] = summary
-        topic_data[topic]['links'].extend(links)
-
-    return topic_data
-
-def format_output(topic_data: Dict[str, Dict[str, List[str]]]) -> str:
-    """Formats the final output with topic summaries and relevant links."""
+def format_output(topic_data: Dict[str, str]) -> str:
+    """Formats the final output with topic summaries."""
     logger.info("Formatting the final output...")
     final_output = []
 
-    for topic, data in topic_data.items():
-        summary = data['summary']
-        links = data['links']
-        link_text = "\n".join(links)
-        final_output.append(f"Topic: {topic}\nSummary: {summary}\nLinks:\n{link_text}\n")
+    for topic, summary in topic_data.items():
+        final_output.append(f"Topic: {topic}\nSummary: {summary}\n")
 
     return "\n".join(final_output)
 
@@ -184,8 +167,8 @@ def main():
         logger.info("No topics found.")
         return
 
-    # Step 3: Summarize the top topics and extract links
-    topic_data = summarize_and_extract_links(top_topics, combined_email_text)
+    # Step 3: Summarize the top topics (without extracting links)
+    topic_data = summarize_topics(top_topics, combined_email_text)
 
     # Step 4: Format the output
     final_output = format_output(topic_data)
