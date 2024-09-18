@@ -1,0 +1,4 @@
+.env
+credentials*
+token*
+.python-version
