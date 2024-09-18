@@ -43,21 +43,36 @@ def split_email_by_tokens(email_text, max_tokens):
 
     return chunks
 
-def get_email_content():
-    """Retrieves all the email subjects and bodies."""
+def get_gmail_credentials():
+    """Handles Gmail authentication and returns credentials to access Gmail API."""
     creds = None
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    token_path = "token.json"
+    
+    # Check if the token.json file exists (contains credentials)
+    if os.path.exists(token_path):
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
 
+    # If there are no valid credentials or the token is expired, refresh or request a new one
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                print(f"Error refreshing credentials: {e}")
+                creds = None  # If refresh fails, reset creds to trigger new login flow
         else:
             flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
             creds = flow.run_local_server(port=0)
-
-        with open("token.json", "w") as token:
+        
+        # Save the credentials for the next run
+        with open(token_path, "w") as token:
             token.write(creds.to_json())
+    
+    return creds
+
+def get_email_content():
+    """Retrieves all the email subjects and bodies."""
+    creds = get_gmail_credentials()
 
     try:
         service = build("gmail", "v1", credentials=creds)
@@ -124,7 +139,9 @@ def final_summary_of_top_topics(batch_summaries):
 
 def main():
     email_texts = get_email_content()
-    if not email_texts:
+    if email_texts:
+        print(f"Processing {len(email_texts)} emails.")
+    else:
         print("No email content available.")
         return
 
