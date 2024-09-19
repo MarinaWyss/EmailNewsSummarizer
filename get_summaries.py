@@ -12,7 +12,7 @@ def identify_top_topics(emails_text: str) -> List[str]:
         Return only the topics in a list with no additional text."
     topics = openai_request(prompt).split('\n')
     logger.info(f"Identified {len(topics)} topics.")
-    logger.info("Topics: ", str(topics))
+    logger.info(f"Topics: {str(topics)}")
     return [topic.strip() for topic in topics if topic.strip()]
 
 def summarize_topics(topics: List[str], emails_text: str) -> Dict[str, str]:
@@ -24,7 +24,7 @@ def summarize_topics(topics: List[str], emails_text: str) -> Dict[str, str]:
     topic_summaries = {}
 
     for i, topic in enumerate(topics):
-        logger.info(f"Processing topic number {i}: {topic}")
+        logger.info(f"Processing topic number {i + 1}: {topic}")
         prompt = f"Summarize the topic '{topic}' based on the following emails:\n\n{emails_text}"
         summary = openai_request(prompt)
         topic_summaries[topic] = summary.strip()
