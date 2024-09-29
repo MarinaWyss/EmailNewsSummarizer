@@ -4,6 +4,7 @@ import time
 import base64
 import logging
 from typing import List
+import tiktoken
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -58,7 +59,13 @@ def get_email_content() -> List[str]:
 
     try:
         service = build("gmail", "v1", credentials=creds)
-        results = service.users().messages().list(userId="me", maxResults=50, q="newer_than:7d").execute()
+        results = service.users().messages().list(
+            userId="me",
+            labelIds=['INBOX'],
+            maxResults=50,
+            q="newer_than:7d",
+            fields='messages(id,threadId)'
+        ).execute()
         messages = results.get("messages", [])
         if not messages:
             logger.info("No messages found.")
@@ -66,7 +73,7 @@ def get_email_content() -> List[str]:
 
         emails = []
         for message in messages:
-            msg = service.users().messages().get(userId="me", id=message["id"]).execute()
+            msg = service.users().messages().get(userId="me", id=message["id"], format="full").execute()
             subject = next((header["value"] for header in msg["payload"]["headers"] if header["name"] == "Subject"), None)
             body_part = next((part for part in msg["payload"].get("parts", []) if part["mimeType"] == "text/plain"), None)
             if body_part:
@@ -109,3 +116,8 @@ def openai_request(prompt: str) -> str:
 def generate_prompt(content, instruction):
     """Generates a prompt by combining content with an instruction."""
     return f"{instruction}\n{content}"
+
+def count_tokens(text: str) -> int:
+    """Returns the number of tokens in the given text."""
+    tokenizer = tiktoken.encoding_for_model("gpt-4o")
+    return len(tokenizer.encode(text))
